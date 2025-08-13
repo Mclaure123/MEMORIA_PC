@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROTOCOLO NEXO [ALMACENAMIENTO v3.3]</title>
+    <style>
+        :root {
+            --bg-color: #0A0A0A;
+            --text-color: #FFB800;
+            --accent-color: #00FFFF;
+            --secondary-color: #606060;
+            --card-back-color: #181818;
+            --border-color: var(--secondary-color);
+            --grid-line-color: rgba(96, 96, 96, 0.2);
+            --accent-error: #FF1A4B;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: monospace, sans-serif; -webkit-tap-highlight-color: transparent; }
+        html, body { width: 100%; height: 100%; overflow: hidden; color: var(--text-color); transition: color 0.5s, background-color 0.5s; }
+        body { background-color: var(--bg-color); background-image: linear-gradient(var(--grid-line-color) 1px, transparent 1px), linear-gradient(to right, var(--grid-line-color) 1px, transparent 1px); background-size: 20px 20px; }
+        
+        #app { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; perspective: 1000px; }
+
+        .screen {
+            display: none; width: 90vw; height: 95vh;
+            flex-direction: column; align-items: center; justify-content: space-evenly;
+            padding: 20px; border: 1px solid var(--border-color); border-radius: 8px;
+            background-color: rgba(10, 10, 10, 0.9);
+            transition: transform 0.1s ease-out, border-color 0.5s;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+        .screen.active { display: flex; }
+        
+        h1, h2, h3 { text-align: center; }
+        h1 { color: var(--accent-color); text-shadow: 0 0 5px var(--accent-color); font-size: 2.5rem; transition: color 0.5s, text-shadow 0.5s; }
+        h3 { font-weight: normal; }
+        .btn-group { display: flex; flex-direction: column; gap: 15px; width: 100%; max-width: 450px; }
+        
+        .game-header { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0 10px; margin-bottom: auto; }
+        #game-grid { display: grid; gap: 10px; width: 100%; margin: auto; flex-grow: 1; }
+        #transition-message { font-size: 1.5rem; color: var(--accent-color); transition: color 0.5s; }
+        #transition-stats { font-size: 1.2rem; color: #888; }
+        
+        .btn-action-primary { padding: 15px 20px; border: 1px solid var(--accent-color); background-color: transparent; color: var(--accent-color); border-radius: 5px; cursor: pointer; text-align: center; transition: all 0.2s; }
+        .btn-action-primary:hover { background-color: color-mix(in srgb, var(--accent-color) 15%, transparent); transform: scale(1.02); }
+        .btn-action-primary .domain-title { font-size: 1.2rem; text-transform: uppercase; }
+
+        .domain-btn { padding: 15px 20px; border: 1px solid var(--accent-color); background-color: transparent; color: var(--accent-color); border-radius: 5px; cursor: pointer; text-align: center; transition: all 0.2s; }
+        .domain-btn:not(.mastered):hover { background-color: color-mix(in srgb, var(--accent-color) 15%, transparent); transform: scale(1.02); }
+        .domain-btn .domain-title { font-size: 1.2rem; text-transform: uppercase; margin-bottom: 8px; display: block; }
+        .domain-btn.mastered { color: var(--secondary-color); border-color: #444; cursor: not-allowed; opacity: 0.7; }
+        
+        /* NUEVO: Protocolo de Visualización de Integridad de Dominio */
+        .domain-progress-container { width: 100%; margin-top: 5px; }
+        .domain-progress-text { font-size: 0.9rem; color: var(--text-color); margin-bottom: 8px; }
+        .data-integrity-bar { display: flex; gap: 4px; width: 100%; height: 12px; }
+        .data-block {
+            flex-grow: 1; background-color: transparent;
+            border: 1px solid var(--secondary-color); border-radius: 2px;
+            transition: all 0.5s ease;
+        }
+        .data-block.secured {
+            background-color: var(--text-color); border-color: color-mix(in srgb, var(--text-color) 80%, #fff);
+            box-shadow: 0 0 5px color-mix(in srgb, var(--text-color) 50%, transparent);
+        }
+        .data-block.active-target {
+            background-color: color-mix(in srgb, var(--accent-color) 20%, transparent);
+            border-color: var(--accent-color);
+            animation: pulse 1.5s infinite;
+        }
+        .domain-btn.mastered .domain-progress-text { color: var(--accent-color); text-shadow: 0 0 4px var(--accent-color); }
+        .domain-btn.mastered .data-block { background-color: var(--accent-color); border-color: var(--accent-color); box-shadow: 0 0 8px var(--accent-color); }
+
+        @keyframes pulse { 0%, 100% { box-shadow: 0 0 2px var(--accent-color); } 50% { box-shadow: 0 0 8px var(--accent-color); } }
+
+        .card { perspective: 1000px; cursor: pointer; background-color: transparent; }
+        .card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s ease, filter 0.5s ease, opacity 0.5s ease; transform-style: preserve-3d; }
+        .card.flipped .card-inner { transform: rotateY(180deg); }
+        .card.solved { cursor: default; }
+        .card.solved .card-inner { transform: rotateY(180deg) scale(0.6); filter: grayscale(1) blur(4px); opacity: 0.25; pointer-events: none; }
+        .card.solved .card-front { box-shadow: none; }
+        .card-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        
+        .card-back { background-color: var(--card-back-color); background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px); background-size: 15px 15px; border: 1px solid var(--secondary-color); transition: all 0.5s; }
+        .card:hover .card-back { border-color: var(--accent-color); background-image: linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(to right, rgba(255, 255, 255, 0.1) 1px, transparent 1px); }
+        
+        .card-front {
+            background: radial-gradient(circle, var(--accent-color), color-mix(in srgb, var(--accent-color) 60%, #000));
+            color: #0A0A0A; border: 1px solid var(--accent-color); transform: rotateY(180deg); padding: 5px; text-align: center;
+            display: grid; place-items: center; line-height: 1.1; font-weight: bold;
+            box-shadow: 0 0 15px var(--accent-color), inset 0 0 10px rgba(255, 255, 255, 0.5);
+            transition: background 0.5s, border-color 0.5s, box-shadow 0.5s;
+            container-type: inline-size;
+        }
+        .card-front span { text-shadow: 0px 0px 8px rgba(0,0,0,0.4); font-size: clamp(0.8rem, 20cqw, 1.8rem); text-wrap: balance; }
+        
+        .overlay-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.98); color: var(--text-color); z-index: 9999; display: none; align-items: center; justify-content: center; text-align: center; }
+        .modal-box { border: 1px solid var(--border-color); padding: 40px; max-width: 600px; background-color: var(--bg-color); transition: background-color 0.5s, border-color 0.5s; }
+        .modal-box h1 { color: var(--accent-error); margin-bottom: 15px; transition: color 0.5s; }
+        .modal-box p { color: var(--text-color); line-height: 1.6; }
+        .modal-btn-group { margin-top: 30px; display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+        
+        .system-actions { position: absolute; bottom: 20px; right: 20px; display: flex; gap: 10px; }
+        .btn-system { padding: 10px; width: 44px; height: 44px; border-radius: 5px; cursor: pointer; transition: all 0.2s; font-size: 1.5rem; display: grid; place-items: center; }
+        .btn-system-danger { background-color: transparent; border: 1px solid var(--accent-error); color: var(--accent-error); }
+        .btn-system-danger:hover { background-color: color-mix(in srgb, var(--accent-error) 20%, transparent); color: #fff; }
+        .btn-system-default { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); }
+        .btn-system-default:hover { border-color: var(--text-color); color: var(--text-color); }
+        .modal-btn-group .btn-system-danger, .modal-btn-group .btn-system-default { width: auto; height: auto; padding: 12px 24px; font-size: 1rem; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="pre-load-screen" class="screen active"><div>INICIANDO...</div></div>
+        <div id="title-screen" class="screen"><h1>PROTOCOLO DE ALMACENAMIENTO v3.3</h1><div class="btn-group"><button id="start-btn" class="btn-action-primary"><span class="domain-title">INICIAR SIMULACIÓN</span></button></div><h3>Un sistema de Arquitecto-Programador de Elite</h3></div>
+        <div id="domain-screen" class="screen">
+            <h2>SELECCIONAR DOMINIO DE DATOS</h2>
+            <div id="domain-selection" class="btn-group"></div>
+            <div class="system-actions">
+                <button id="toggle-sound-btn" class="btn-system btn-system-default" title="Activar/Desactivar Sonido">🔇</button>
+                <button id="cycle-palette-btn" class="btn-system btn-system-default" title="Cambiar Paleta de Colores">🎨</button>
+                <button id="request-purge-btn" class="btn-system btn-system-danger" title="Purgar Progreso">🗑️</button>
+            </div>
+        </div>
+        <div id="game-screen" class="screen"><div class="game-header"><span id="game-player-name"></span><span id="game-attempts"></span></div><div id="game-grid"></div></div>
+        <div id="transition-screen" class="screen"><h2 id="transition-message"></h2><p id="transition-stats"></p><button id="continue-btn" class="btn-action-primary"><span class="domain-title">CONTINUAR</span></button></div>
+    </div>
+
+    <div id="fullscreen-enforcer" class="overlay-modal"><div class="modal-box"><h1>ENTORNO DE EJECUCIÓN INSEGURO</h1><p>Se requiere modo de pantalla completa para mantener la integridad del sistema.</p><br><button id="restore-fullscreen-btn" class="btn-action-primary"><span class="domain-title">RESTAURAR PANTALLA COMPLETA</span></button></div></div>
+    <div id="purge-confirmation-modal" class="overlay-modal"><div class="modal-box"><h1>ALERTA DE SISTEMA</h1><p>Esta acción es irreversible y purgará todos los datos de progreso del dominio. ¿Proceder con la purga total del sistema?</p><div class="modal-btn-group"><button id="confirm-purge-btn" class="btn-system-danger">CONFIRMAR PURGA</button><button id="cancel-purge-btn" class="btn-system-default">CANCELAR</button></div></div></div>
+
+    <script>
+    const AudioEngine = {
+        ctx: null, isInitialized: false,
+        init() {
+            if (this.isInitialized || this.ctx) return;
+            try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); this.isInitialized = true; console.log("AudioEngine: INICIALIZADO"); } 
+            catch(e) { console.error("AudioEngine: Fallo al inicializar Web Audio API.", e); }
+        },
+        play(type, freq, duration = 0.1, vol = 0.1) {
+            if (!this.isInitialized) return;
+            const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+            osc.type = type; osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.00001, this.ctx.currentTime + duration);
+            osc.connect(gain); gain.connect(this.ctx.destination); osc.start(); osc.stop(this.ctx.currentTime + duration);
+        },
+        playClick() { this.play('sine', 880, 0.05, 0.08); },
+        playFlip() { this.play('square', 440, 0.08, 0.05); },
+        playSuccess() { if (!this.isInitialized) return; this.play('sine', 523.25, 0.1, 0.1); setTimeout(() => this.play('sine', 783.99, 0.15, 0.1), 120); },
+        playFail() { this.play('sawtooth', 110, 0.2, 0.1); }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const ProtocoloNexo = {
+            DOMAINS: {
+                unidades: { name: 'DOMINIO DE UNIDADES', levels: ['Bit', 'Byte', 'Kilobyte', 'Megabyte', 'Gigabyte', 'Terabyte', 'Petabyte', 'Exabyte', 'Zettabyte', 'Yottabyte'], wordBank: ['BIT', 'NIBBLE', 'BYTE', 'OCTETO', 'WORD', 'KILOBYTE', 'MEGABYTE', 'GIGABYTE', 'TERABYTE', 'PETABYTE', 'EXABYTE', 'ZETTABYTE', 'YOTTABYTE', 'IOPS', 'LATENCIA', 'THROUGHPUT', 'CACHE L1', 'CACHE L2', 'REGISTRO', 'VOLÁTIL', 'NO VOLÁTIL', 'SECTOR', 'CLUSTER', 'BLOQUE', 'PÁGINA', 'LBA', 'CHS', 'SEEK TIME', 'DRAM', 'SRAM', 'MB/s', 'GB/s', 'ANCHO DE BANDA', 'BUFFER', 'TIEMPO ACCESO', 'DDR5', 'ECC', 'PARIDAD'] },
+                medios: { name: 'DOMINIO DE MEDIOS', levels: ['Tarjeta Perforada', 'Cinta Magnética', 'Diskette 5¼"', 'CD-ROM', 'Memoria USB', 'Tarjeta SD', 'Disco Duro (HDD)', 'Disco de Estado Sólido (SSD)', 'Almacenamiento en Red (NAS)', 'Centro de Datos en la Nube'], wordBank: ['PUNCH CARD', 'MAG TAPE', 'FLOPPY 5.25"', 'FLOPPY 3.5"', 'ZIP DRIVE', 'CD-ROM', 'CD-RW', 'DVD-R', 'BLU-RAY', 'USB STICK', 'SD CARD', 'MICROSD', 'COMPACTFLASH', 'HDD', 'SSD', 'M.2 NVME', 'SATA', 'PATA', 'SCSI', 'SAS', 'NAS', 'SAN', 'RAID ARRAY', 'CLOUD', 'DATACENTER', 'HOLOGRAMA', 'ADN STORAGE', 'ROM', 'PROM', 'EPROM', 'EEPROM', 'FLASH NAND', '3D XPOINT', 'PLATOS', 'CABEZAL', 'ACTUADOR', 'FIRMWARE'] },
+                conceptos: { name: 'DOMINIO DE CONCEPTOS', levels: ['Acceso Secuencial', 'Acceso Directo', 'Sistema de Archivos', 'Fragmentación', 'Compresión', 'Encriptación', 'RAID 0 (Stripe)', 'RAID 1 (Mirror)', 'Latencia', 'Ancho de Banda'], wordBank: ['FAT32', 'NTFS', 'EXFAT', 'EXT4', 'HFS+', 'APFS', 'BTRFS', 'ZFS', 'DEFRAGMENT', 'COMPRESS', 'ENCRYPT', 'DECRYPT', 'RAID 0', 'RAID 1', 'RAID 5', 'RAID 10', 'HOT SWAP', 'COLD STORAGE', 'BACKUP', 'SNAPSHOT', 'FILESYSTEM', 'JOURNALING', 'INODE', 'MFT', 'PARTICIÓN', 'VOLUMEN', 'FORMATO', 'TRIM', 'WEAR LEVELING', 'ECC', 'S.M.A.R.T.', 'OVERPROVISION', 'GARBAGE COLL.', 'CACHE', 'BUFFER', 'SINCRONO', 'ASINCRONO'] }
+            },
+            PALETTES: [
+                { name: 'CIAN', colors: { '--bg-color': '#0A0A0A', '--text-color': '#B0B4C0', '--accent-color': '#00FFFF', '--accent-error': '#FF1A4B', '--secondary-color': '#606060', '--card-back-color': '#181818' } },
+                { name: 'FUEGO', colors: { '--bg-color': '#100505', '--text-color': '#D6C2C2', '--accent-color': '#FF1A4B', '--accent-error': '#E8FF3B', '--secondary-color': '#8c4343', '--card-back-color': '#2e1a1a' } },
+                { name: 'JUNGLA', colors: { '--bg-color': '#051007', '--text-color': '#C2D6C7', '--accent-color': '#00FF41', '--accent-error': '#FF6B00', '--secondary-color': '#296b3a', '--card-back-color': '#1a2e1d' } },
+            ],
+            gameState: { playerName: 'Agente', progress: { unidades: 0, medios: 0, conceptos: 0 }, currentDomain: null, flippedCards: [], attempts: 0, solvedPairs: 0, totalPairs: 0, isChecking: false, currentPaletteIndex: 0, isSoundEnabled: false },
+            dom: { 
+                app: document.getElementById('app'), screens: document.querySelectorAll('.screen'), startBtn: document.getElementById('start-btn'), domainSelection: document.getElementById('domain-selection'), gameGrid: document.getElementById('game-grid'), gamePlayerName: document.getElementById('game-player-name'), gameAttempts: document.getElementById('game-attempts'), transitionMessage: document.getElementById('transition-message'), transitionStats: document.getElementById('transition-stats'), continueBtn: document.getElementById('continue-btn'),
+                fullscreenEnforcer: document.getElementById('fullscreen-enforcer'), restoreFullscreenBtn: document.getElementById('restore-fullscreen-btn'),
+                purgeConfirmationModal: document.getElementById('purge-confirmation-modal'), requestPurgeBtn: document.getElementById('request-purge-btn'), confirmPurgeBtn: document.getElementById('confirm-purge-btn'), cancelPurgeBtn: document.getElementById('cancel-purge-btn'),
+                cyclePaletteBtn: document.getElementById('cycle-palette-btn'), toggleSoundBtn: document.getElementById('toggle-sound-btn')
+            },
+            
+            init() { this.loadState(); this.applyPalette(); this.updateSoundButton(); this.setupEventListeners(); this.runPreloadSequence(); },
+            loadState() { const savedState = localStorage.getItem('protocoloNexoState'); if (savedState) { try { const parsedState = JSON.parse(savedState); this.gameState = { ...this.gameState, ...parsedState }; } catch (e) { console.error("Fallo de integridad de datos. Purgando."); this.saveState(); } } },
+            saveState() { localStorage.setItem('protocoloNexoState', JSON.stringify(this.gameState)); },
+            showScreen(screenId) { this.dom.screens.forEach(s => s.classList.remove('active')); document.getElementById(screenId).classList.add('active'); },
+            runPreloadSequence() { setTimeout(() => this.showScreen('title-screen'), 1200); },
+            
+            setupEventListeners() {
+                const firstUserInteraction = () => { AudioEngine.init(); document.removeEventListener('click', firstUserInteraction); };
+                document.addEventListener('click', firstUserInteraction);
+                this.dom.startBtn.addEventListener('click', () => { this.requestFullscreen(); this.showScreen('domain-screen'); this.buildDomainScreen(); });
+                this.dom.continueBtn.addEventListener('click', () => { this.playSound('click'); this.showScreen('domain-screen'); this.buildDomainScreen(); });
+                document.addEventListener('mousemove', (e) => this.handleParallax(e));
+                this.dom.restoreFullscreenBtn.addEventListener('click', () => { this.playSound('click'); this.requestFullscreen(); });
+                document.addEventListener('fullscreenchange', () => this.checkFullscreen());
+                this.dom.requestPurgeBtn.addEventListener('click', () => { this.playSound('click'); this.togglePurgeModal(true); });
+                this.dom.cancelPurgeBtn.addEventListener('click', () => { this.playSound('click'); this.togglePurgeModal(false); });
+                this.dom.confirmPurgeBtn.addEventListener('click', () => { this.playSound('fail'); this.executeSystemPurge(); });
+                this.dom.cyclePaletteBtn.addEventListener('click', () => { this.playSound('click'); this.cyclePalette(); });
+                this.dom.toggleSoundBtn.addEventListener('click', () => this.toggleSound());
+            },
+
+            playSound(soundType) { if (!this.gameState.isSoundEnabled) return; switch (soundType) { case 'click': AudioEngine.playClick(); break; case 'flip': AudioEngine.playFlip(); break; case 'success': AudioEngine.playSuccess(); break; case 'fail': AudioEngine.playFail(); break; } },
+            applyPalette() { const palette = this.PALETTES[this.gameState.currentPaletteIndex].colors; for (const [key, value] of Object.entries(palette)) { document.documentElement.style.setProperty(key, value); } },
+            cyclePalette() { this.gameState.currentPaletteIndex = (this.gameState.currentPaletteIndex + 1) % this.PALETTES.length; this.applyPalette(); this.saveState(); },
+            toggleSound() { this.gameState.isSoundEnabled = !this.gameState.isSoundEnabled; this.playSound('click'); this.updateSoundButton(); this.saveState(); },
+            updateSoundButton() { this.dom.toggleSoundBtn.textContent = this.gameState.isSoundEnabled ? '🔊' : '🔇'; },
+            
+            requestFullscreen() { if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen().catch(err => { console.error(`Error al intentar activar pantalla completa: ${err.message} (${err.name})`); }); } },
+            checkFullscreen() { this.dom.fullscreenEnforcer.style.display = document.fullscreenElement ? 'none' : 'flex'; },
+            togglePurgeModal(show) { this.dom.purgeConfirmationModal.style.display = show ? 'flex' : 'none'; },
+            executeSystemPurge() {
+                localStorage.removeItem('protocoloNexoState'); this.gameState.progress = { unidades: 0, medios: 0, conceptos: 0 };
+                this.gameState.currentPaletteIndex = 0; this.applyPalette(); this.saveState();
+                this.buildDomainScreen(); this.togglePurgeModal(false); console.log("PROTOCOLO DE PURGA DE SISTEMA: EJECUTADO.");
+            },
+            handleParallax(e) {
+                const activeScreen = document.querySelector('.screen.active'); if (!activeScreen) return;
+                const { clientX, clientY } = e; const { offsetWidth, offsetHeight } = this.dom.app;
+                const rotateY = ((clientX / offsetWidth) - 0.5) * 10; const rotateX = -((clientY / offsetHeight) - 0.5) * 10;
+                activeScreen.style.transform = `rotateY(${rotateY}deg) rotateX(${rotateX}deg)`;
+            },
+
+            // REFACTORIZACIÓN: Implementación del Protocolo de Visualización de Integridad de Dominio
+            buildDomainScreen() {
+                this.dom.domainSelection.innerHTML = '';
+                for (const domainKey in this.DOMAINS) {
+                    const domain = this.DOMAINS[domainKey];
+                    const btn = document.createElement('button'); const title = document.createElement('span'); 
+                    const progressContainer = document.createElement('div'); const progressText = document.createElement('span');
+                    const integrityBar = document.createElement('div');
+                    const progressLevel = this.gameState.progress[domainKey];
+                    
+                    btn.className = 'domain-btn'; title.className = 'domain-title'; 
+                    progressContainer.className = 'domain-progress-container'; progressText.className = 'domain-progress-text';
+                    integrityBar.className = 'data-integrity-bar';
+
+                    title.textContent = domain.name;
+                    btn.appendChild(title);
+
+                    if (progressLevel >= domain.levels.length) {
+                        btn.classList.add('mastered'); btn.disabled = true;
+                        progressText.textContent = `MAESTRÍA DE DOMINIO ALCANZADA`;
+                    } else {
+                        progressText.textContent = `[ ${progressLevel} / ${domain.levels.length} ] NIVELES ASEGURADOS`;
+                        btn.onclick = () => { this.playSound('click'); this.gameState.currentDomain = domainKey; this.startGame(); };
+                    }
+                    
+                    for (let i = 0; i < domain.levels.length; i++) {
+                        const block = document.createElement('div');
+                        block.className = 'data-block';
+                        if (i < progressLevel) block.classList.add('secured');
+                        if (i === progressLevel && progressLevel < domain.levels.length) block.classList.add('active-target');
+                        integrityBar.appendChild(block);
+                    }
+
+                    progressContainer.appendChild(progressText);
+                    progressContainer.appendChild(integrityBar);
+                    btn.appendChild(progressContainer);
+                    this.dom.domainSelection.appendChild(btn);
+                }
+            },
+            
+            startGame() {
+                this.gameState.attempts = 0; this.gameState.solvedPairs = 0;
+                const progress = this.gameState.progress[this.gameState.currentDomain];
+                this.gameState.totalPairs = progress + 2;
+                this.dom.gamePlayerName.textContent = `Operador: ${this.gameState.playerName}`; this.dom.gameAttempts.textContent = `Intentos: 0`;
+                this.buildGrid(); this.showScreen('game-screen');
+            },
+            
+            calculateGridDimensions(totalItems) {
+                if (totalItems <= 0) return { rows: 0, cols: 0 }; let bestLayout = { rows: 1, cols: totalItems };
+                const sqrt = Math.sqrt(totalItems);
+                for (let i = Math.floor(sqrt); i > 0; i--) { if (totalItems % i === 0) { return { rows: i, cols: totalItems / i }; } }
+                for (let i = Math.floor(sqrt) + 1; i < totalItems; i++) { if (totalItems % i === 0) { return { rows: totalItems / i, cols: i }; } }
+                return bestLayout;
+            },
+
+            buildGrid() {
+                const domain = this.DOMAINS[this.gameState.currentDomain]; const numPairs = this.gameState.totalPairs;
+                const wordsToUse = this.getRandomItems(domain.wordBank, numPairs); const finalCards = [...wordsToUse, ...wordsToUse]; 
+                this.shuffle(finalCards);
+                const { rows, cols } = this.calculateGridDimensions(finalCards.length);
+                this.dom.gameGrid.innerHTML = ''; this.dom.gameGrid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`; this.dom.gameGrid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+                finalCards.forEach(word => {
+                    const card = document.createElement('div'); card.className = 'card'; card.dataset.id = word;
+                    const cardInner = document.createElement('div'); cardInner.className = 'card-inner';
+                    const cardBack = document.createElement('div'); cardBack.className = 'card-face card-back';
+                    const cardFront = document.createElement('div'); cardFront.className = 'card-face card-front';
+                    const span = document.createElement('span'); span.textContent = word;
+                    cardFront.appendChild(span); cardInner.appendChild(cardBack); cardInner.appendChild(cardFront); card.appendChild(cardInner);
+                    card.addEventListener('click', () => this.handleCardClick(card)); this.dom.gameGrid.appendChild(card);
+                });
+            },
+
+            handleCardClick(card) {
+                if (this.gameState.isChecking || card.classList.contains('flipped') || card.classList.contains('solved')) return;
+                this.playSound('flip'); card.classList.add('flipped'); this.gameState.flippedCards.push(card);
+                if (this.gameState.flippedCards.length === 2) this.checkForMatch();
+            },
+            checkForMatch() {
+                this.gameState.isChecking = true; this.gameState.attempts++; this.dom.gameAttempts.textContent = `Intentos: ${this.gameState.attempts}`;
+                const [card1, card2] = this.gameState.flippedCards;
+                if (card1.dataset.id === card2.dataset.id) {
+                    setTimeout(() => { this.playSound('success'); card1.classList.add('solved'); card2.classList.add('solved'); this.gameState.solvedPairs++; this.gameState.flippedCards = []; this.gameState.isChecking = false; if (this.gameState.solvedPairs === this.gameState.totalPairs) this.endGame(true); }, 500);
+                } else { setTimeout(() => { this.playSound('fail'); card1.classList.remove('flipped'); card2.classList.remove('flipped'); this.gameState.flippedCards = []; this.gameState.isChecking = false; }, 1200); }
+            },
+            
+            endGame(isVictory) { 
+                if(!isVictory) return; const domainKey = this.gameState.currentDomain;
+                const currentLevelName = this.DOMAINS[domainKey].levels[this.gameState.progress[domainKey]];
+                this.advanceProgress(); this.dom.transitionMessage.textContent = `NIVEL ${currentLevelName.toUpperCase()} ASEGURADO`;
+                this.dom.transitionStats.textContent = `Validación de ${this.gameState.totalPairs} términos completada en ${this.gameState.attempts} intentos.`;
+                this.showScreen('transition-screen');
+            },
+            
+            advanceProgress() {
+                const domainKey = this.gameState.currentDomain; const domain = this.DOMAINS[domainKey];
+                if (this.gameState.progress[domainKey] < domain.levels.length) { this.gameState.progress[domainKey]++; this.saveState(); }
+            },
+            
+            shuffle(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } },
+            getRandomItems(array, numItems) { return [...array].sort(() => 0.5 - Math.random()).slice(0, numItems); }
+        };
+
+        ProtocoloNexo.init();
+    });
+    </script>
+</body>
+</html>
